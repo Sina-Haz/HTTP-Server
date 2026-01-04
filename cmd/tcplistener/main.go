@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"sina.http/internal/request"
 )
 
 const port = ":42069"
@@ -18,18 +20,16 @@ func main() {
 	}
 	defer listener.Close()
 	fmt.Println("Listening for TCP traffic on port", port)
-	for {
-		// wait for listenek to connect
-		conn, err := listener.Accept()
-		if err != nil {
-			log.Fatal("error", err)
-		}
-		linesChan := getLinesChannel(conn)
-		for line := range linesChan {
-			fmt.Printf("%s\n", line)
-		}
+	// wait for listenek to connect
+	conn, err := listener.Accept()
+	if err != nil {
+		log.Fatal("error", err)
 	}
-
+	r, err := request.RequestFromReader(conn)
+	fmt.Println("Request line:")
+	fmt.Printf("- Method: %s\n", r.RequestLine.Method)
+	fmt.Printf("- Target: %s\n", r.RequestLine.RequestTarget)
+	fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
 }
 
 // So input f implements Read() and Close() that's all io.ReadCloser
