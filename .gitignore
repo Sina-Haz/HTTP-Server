@@ -1,0 +1,19 @@
+# template .gitignore
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binary and coverage
+*.test
+*.out
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+
+tmp/
