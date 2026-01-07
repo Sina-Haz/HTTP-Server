@@ -4,32 +4,36 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
-
-	"sina.http/internal/request"
 )
 
 var BAD_HEADER = fmt.Errorf("Malformed HTTP header")
+var crlf = []byte("\r\n")
 
 type Headers map[string]string
 
-// can technically pass in by value here because maps in go are reference types so changing h
-// will still update the key-value pairs in the map even though its passed by value
+// Will take in the data and only parse one header at a time
+// Returns number of bytes parsed, done == parsed all headers, error
+// can pass in Headers by value as maps are reference types so h is copy of ptr to hashmap
 func (h Headers) Parse(data []byte) (int, bool, error) {
-	endHeaderIdx := bytes.Index(data, bytes.Repeat(request.CRLF, 2))
-	if endHeaderIdx == -1 {
-		return 0, false, nil // still waiting for \r\n\r\n which signals end of HTTP headers
+	crlfIdx := bytes.Index(data, crlf)
+	if crlfIdx == -1 {
+		return 0, false, nil
 	}
-	headers := bytes.SplitSeq(data[:endHeaderIdx], request.CRLF)
-	for hdr := range headers {
-		trimmed := bytes.TrimSpace(hdr)
-		fn, fv, ok := strings.Cut(string(trimmed), ":")
-		if !ok || strings.Contains(fn, " ") {
-			return 0, false, BAD_HEADER
-		}
-		fv = strings.TrimSpace(fv)
-		h[fn] = fv
+	if crlfIdx == 0 {
+		return len(crlf), true, nil
 	}
-	return endHeaderIdx + len(request.CRLF)*2, true, nil
+	parsedN := crlfIdx + len(crlf)
+	hdr := string(data[:crlfIdx])
+	trimmed := strings.TrimSpace(hdr) // trim whitespace before and after field name & field val
+	fn, fv, ok := strings.Cut(trimmed, ":")
+	if !ok || strings.Contains(fn, " ") {
+		return 0, false, BAD_HEADER
+	}
+	// trim optional whitespace before and after field val
+	fv = strings.TrimSpace(fv)
+	h[fn] = fv
+
+	return parsedN, false, nil
 }
 
 func NewHeaders() Headers {
