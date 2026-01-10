@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"sina.http/internal/headers"
 )
 
 var BAD_REQ_LINE = fmt.Errorf("malformed request line")
@@ -14,12 +16,14 @@ var CRLF = []byte("\r\n")
 
 // using string enum for better readability
 const (
-	initState  = "init"
-	finalState = "done"
+	initState   = "init"
+	headerState = "headers"
+	finalState  = "done"
 )
 
 type Request struct {
 	RequestLine RequestLine
+	headers     headers.Headers
 	state       string
 }
 
@@ -32,14 +36,26 @@ outer:
 			rl, n, err := parseRequestLine(data[read:])
 
 			if err != nil {
-				return n, errors.Join(fmt.Errorf("unable to parse request line, data passed was: %q", data), err)
+				return n, errors.Join(fmt.Errorf("unable to parse request line, data passed was: %q", data[read:]), err)
 			}
 			if n == 0 {
 				break outer
 			}
 			r.RequestLine = *rl
 			read += n
-			r.state = finalState // TODO: make this the next state (i.e. parse field lines now)
+			r.state = headerState
+		case headerState:
+			n, done, err := r.headers.Parse(data[read:])
+			if err != nil {
+				return n, errors.Join(fmt.Errorf("unable to parse headers data passed was: %q", data[read:]), err)
+			}
+			if n == 0 {
+				break outer // need to read more
+			}
+			read += n
+			if done == true {
+				r.state = finalState
+			}
 		case finalState:
 			break outer
 		}
@@ -55,7 +71,8 @@ type RequestLine struct {
 
 func newRequest() *Request {
 	return &Request{
-		state: initState,
+		headers: headers.NewHeaders(),
+		state:   initState,
 	}
 }
 
@@ -83,7 +100,7 @@ func parseRequestLine(msg []byte) (*RequestLine, int, error) {
 		HttpVersion:   version,
 	}
 
-	return &rl, idx, nil
+	return &rl, idx + len(CRLF), nil
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
@@ -94,7 +111,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		n, err := reader.Read(buf[bufLen:])
 		// TODO: handle this error better
 		if err != nil {
-			return nil, errors.Join(fmt.Errorf("read error while parsing request"), err)
+			return nil, errors.Join(fmt.Errorf("reader.Read() error while parsing request"), err)
 		}
 		bufLen += n
 		parsed, err := req.parse(buf[:bufLen])
@@ -105,6 +122,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		// which would cause buffer to get smaller every iteration
 		copy(buf, buf[parsed:bufLen])
 		bufLen -= parsed
+	}
+	if string(buf[:bufLen]) != "" {
+		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%s\n", string(buf[:bufLen]))
 	}
 
 	return req, nil

@@ -5,7 +5,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sina.http/internal/request"
 )
 
 func TestHelloWorld(t *testing.T) {
@@ -38,7 +37,7 @@ func TestHeaderParsing(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, headers)
 	assert.Equal(t, "localhost:42069", headers.Get("Host"))
-	assert.Equal(t, len(data)-len(request.CRLF), n)
+	assert.Equal(t, len(data)-len(crlf), n)
 	assert.False(t, done)
 
 	// Test: Valid done + existing headers

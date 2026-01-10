@@ -31,7 +31,7 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func isCorrect(method string, target string, r *Request, err error, t *testing.T) {
+func checkRequestLineCorrect(method string, target string, r *Request, err error, t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, r)
 	assert.Equal(t, method, r.RequestLine.Method)
@@ -67,7 +67,7 @@ func TestRequestLineParse(t *testing.T) {
 		numBytesPerRead: 3,
 	}
 	r, err := RequestFromReader(reader)
-	isCorrect("GET", "/", r, err, t)
+	checkRequestLineCorrect("GET", "/", r, err, t)
 
 	// Test: Good GET Request line with path
 	reader = &chunkReader{
@@ -75,7 +75,7 @@ func TestRequestLineParse(t *testing.T) {
 		numBytesPerRead: 1,
 	}
 	r, err = RequestFromReader(reader)
-	isCorrect("GET", "/coffee", r, err, t)
+	checkRequestLineCorrect("GET", "/coffee", r, err, t)
 
 	// Test: Good GET with reader reading full string all at once
 	reader = &chunkReader{
@@ -84,7 +84,7 @@ func TestRequestLineParse(t *testing.T) {
 	}
 	reader.numBytesPerRead = len(reader.data)
 	r, err = RequestFromReader(reader)
-	isCorrect("GET", "/coffee", r, err, t)
+	checkRequestLineCorrect("GET", "/coffee", r, err, t)
 
 	// Test: Invalid number of parts in request line
 	reader = &chunkReader{
@@ -101,4 +101,43 @@ func TestRequestLineParse(t *testing.T) {
 	}
 	_, err = RequestFromReader(reader)
 	require.Error(t, err)
+}
+
+func TestRequestsWithHeaders(t *testing.T) {
+	// Test: good request with normal headers
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\n			User-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	assert.Equal(t, r.headers.Get("HOST"), "localhost:42069")
+	assert.Equal(t, r.headers.Get("user-agent"), "curl/7.81.0")
+	assert.Equal(t, r.headers.Get("ACCEPT"), "*/*")
+
+	// Test: headers with invalid characters
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\n@ccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Test: invalid whitespace in header
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept	: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err)
+
+	// Test: valid duplicate field name headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.NoError(t, err)
+	assert.Equal(t, r.headers.Get("accept"), "*/*, */*")
+
 }
