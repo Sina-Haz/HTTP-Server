@@ -27,38 +27,64 @@ type Request struct {
 	state       string
 }
 
+func (r Request) Print() {
+	fmt.Println("Request line:")
+	fmt.Printf("- Method: %s\n", r.RequestLine.Method)
+	fmt.Printf("- Target: %s\n", r.RequestLine.RequestTarget)
+	fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
+	fmt.Println("Headers:")
+	for key, value := range r.headers {
+		fmt.Printf("- %s: %s\n", key, value)
+	}
+	fmt.Println()
+}
+
+func (r *Request) onePass(unparsed_data []byte) (int, error) {
+	var parsedN int
+	switch r.state {
+	case initState:
+		// when use :=, overwrites n to be in local scope instead of updating the n from function level
+		// Therefore we will refactor to add n to function level-val which will be renamed parsedN
+		rl, n, err := parseRequestLine(unparsed_data)
+
+		if err != nil {
+			return n, errors.Join(fmt.Errorf("unable to parse request line, data passed was: %q", unparsed_data), err)
+		}
+		if n == 0 {
+			break
+		}
+		r.RequestLine = *rl
+		r.state = headerState
+		parsedN = n
+	case headerState:
+		n, done, err := r.headers.Parse(unparsed_data)
+		if err != nil {
+			return n, errors.Join(fmt.Errorf("unable to parse headers data passed was: %q", unparsed_data), err)
+		}
+		if n == 0 {
+			break
+		}
+		if done == true {
+			r.state = finalState
+		}
+		parsedN = n
+	case finalState:
+		break
+	}
+	return parsedN, nil
+}
+
 func (r *Request) parse(data []byte) (int, error) {
 	read := 0
-outer:
-	for {
-		switch r.state {
-		case initState:
-			rl, n, err := parseRequestLine(data[read:])
-
-			if err != nil {
-				return n, errors.Join(fmt.Errorf("unable to parse request line, data passed was: %q", data[read:]), err)
-			}
-			if n == 0 {
-				break outer
-			}
-			r.RequestLine = *rl
-			read += n
-			r.state = headerState
-		case headerState:
-			n, done, err := r.headers.Parse(data[read:])
-			if err != nil {
-				return n, errors.Join(fmt.Errorf("unable to parse headers data passed was: %q", data[read:]), err)
-			}
-			if n == 0 {
-				break outer // need to read more
-			}
-			read += n
-			if done == true {
-				r.state = finalState
-			}
-		case finalState:
-			break outer
+	for r.state != finalState {
+		parsedN, err := r.onePass(data[read:])
+		if err != nil {
+			return read, err
 		}
+		if parsedN == 0 {
+			break // signal that we need to pop up to RequestFromReader fn and read more data
+		}
+		read += parsedN
 	}
 	return read, nil
 }
@@ -126,6 +152,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	if string(buf[:bufLen]) != "" {
 		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%s\n", string(buf[:bufLen]))
 	}
+	req.Print()
 
 	return req, nil
 }

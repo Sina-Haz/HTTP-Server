@@ -1,7 +1,6 @@
 package request
 
 import (
-	"fmt"
 	"io"
 	"testing"
 
@@ -52,7 +51,7 @@ func TestChunkReader(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	fmt.Println("testing reader readAll():", string(readData))
+	t.Log("testing reader readAll():", string(readData), "\n")
 
 	expected := "Hello, World! This is a test."
 	if string(readData) != expected {
@@ -139,5 +138,14 @@ func TestRequestsWithHeaders(t *testing.T) {
 	r, err = RequestFromReader(reader)
 	require.NoError(t, err)
 	assert.Equal(t, r.headers.Get("accept"), "*/*, */*")
+
+	// Missing End of Headers
+	reader = &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n",
+		numBytesPerRead: 3,
+	}
+	r, err = RequestFromReader(reader)
+	require.Error(t, err) // returns an EOF error
+	t.Logf("Error details: %+v", err)
 
 }
