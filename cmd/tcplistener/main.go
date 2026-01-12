@@ -26,10 +26,7 @@ func main() {
 		log.Fatal("error", err)
 	}
 	r, err := request.RequestFromReader(conn)
-	fmt.Println("Request line:")
-	fmt.Printf("- Method: %s\n", r.RequestLine.Method)
-	fmt.Printf("- Target: %s\n", r.RequestLine.RequestTarget)
-	fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
+	r.Print()
 }
 
 // So input f implements Read() and Close() that's all io.ReadCloser

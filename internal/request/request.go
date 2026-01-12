@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"sina.http/internal/headers"
@@ -18,12 +19,14 @@ var CRLF = []byte("\r\n")
 const (
 	initState   = "init"
 	headerState = "headers"
+	bodyState   = "body"
 	finalState  = "done"
 )
 
 type Request struct {
 	RequestLine RequestLine
 	headers     headers.Headers
+	Body        []byte
 	state       string
 }
 
@@ -36,6 +39,7 @@ func (r Request) Print() {
 	for key, value := range r.headers {
 		fmt.Printf("- %s: %s\n", key, value)
 	}
+	fmt.Printf("Body:\n %s\n", string(r.Body))
 	fmt.Println()
 }
 
@@ -65,11 +69,27 @@ func (r *Request) onePass(unparsed_data []byte) (int, error) {
 			break
 		}
 		if done == true {
-			r.state = finalState
+			r.state = bodyState
 		}
 		parsedN = n
+	case bodyState:
+		content_len := r.headers.Get("content-length")
+		if content_len == "" || content_len == "0" {
+			r.state = finalState // assume no body to parse and we will finish
+		}
+		conLen, err := strconv.Atoi(content_len)
+		if err != nil {
+			return parsedN, errors.Join(fmt.Errorf("content-length header value could not be parsed as a string, header value = %q", r.headers.Get("content-length")), err)
+		}
+		if len(unparsed_data) < conLen {
+			break // parsedN should be 0 and tells us to read more bytes in. If body shorter than conLen then call to reader.Read() will eventually hit EOF
+		}
+		r.Body = unparsed_data[:conLen]
+		r.state = finalState
 	case finalState:
 		break
+	default:
+		panic("Skill issue")
 	}
 	return parsedN, nil
 }
@@ -152,7 +172,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	if string(buf[:bufLen]) != "" {
 		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%s\n", string(buf[:bufLen]))
 	}
-	req.Print()
 
 	return req, nil
 }
