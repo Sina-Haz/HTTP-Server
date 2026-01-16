@@ -26,8 +26,10 @@ const (
 type Request struct {
 	RequestLine RequestLine
 	headers     headers.Headers
-	Body        []byte
-	state       string
+	// In Go implementation body is a io.ReadCloser -> much more performant b/c can stream body instead of reading it all in at once
+	// Ideally handler would get reader of body and would read as necessary
+	Body  []byte
+	state string
 }
 
 func (r Request) Print() {
