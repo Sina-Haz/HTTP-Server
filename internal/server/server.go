@@ -6,6 +6,8 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+
+	"sina.http/internal/response"
 )
 
 // bind+listen to a port -> in a loop accept connections and handle each in a goroutine -> do until closed
@@ -44,23 +46,34 @@ func (s *Server) listen() {
 
 		// TODO: May need to change this to a 500 internal server error or something
 		if err != nil {
-			log.Fatalf("Server could not accept incoming connection, see error:\n%d ", err)
+			log.Fatalf("Server could not accept incoming connection, see error:\n%v ", err)
 		}
 		go s.handle(conn)
 	}
 }
 
 func (s *Server) handle(conn io.ReadWriteCloser) {
-	response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!"
-	n, err := conn.Write([]byte(response))
+	statusCode := 200
+	content := "Hello World\r\n"
+	h := response.GetDefaultHeaders(len(content))
+	// write status line then headers, then content
+	err := response.WriteStatusLine(conn, statusCode)
+	err = response.WriteHeaders(conn, h)
+	_, err = conn.Write([]byte(content))
 	if err != nil {
-		log.Fatalf("Error happened while writing response: \n%d", err)
-	}
-	if n != len(response) {
-		fmt.Print("Error: server didn't write back full response")
+		log.Fatalf("error occurred while handling server connection: %v", err)
 	}
 	conn.Close()
 }
+
+// response := "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello World!"
+// n, err := conn.Write([]byte(response))
+// if err != nil {
+// 	log.Fatalf("Error happened while writing response: \n%d", err)
+// }
+// if n != len(response) {
+// 	fmt.Print("Error: server didn't write back full response")
+// }
 
 // func (s Server) Serve(port int) {
 // 	strPort := fmt.Sprintf("%d", port)
