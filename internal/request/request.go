@@ -78,6 +78,7 @@ func (r *Request) onePass(unparsed_data []byte) (int, error) {
 		content_len := r.headers.Get("content-length")
 		if content_len == "" || content_len == "0" {
 			r.state = finalState // assume no body to parse and we will finish
+			break
 		}
 		conLen, err := strconv.Atoi(content_len)
 		if err != nil {
