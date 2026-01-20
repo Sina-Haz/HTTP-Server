@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -14,18 +13,24 @@ import (
 
 const port = 42069
 
-func server_handler(w io.Writer, req *request.Request) {
+func server_handler(rw *response.Writer, req *request.Request) {
 	resource := req.RequestLine.RequestTarget
-	var resp *response.Response
+	var body []byte
 	switch resource {
 	case "/yourproblem":
-		resp = response.CreateResponse(400, []byte("your problem is not my problem\n"))
+		body = []byte("your problem is not my problem\n")
+		rw.WriteStatusLine(400)
+		rw.WriteHeaders(response.GetDefaultHeaders(len(body)))
 	case "/myproblem":
-		resp = response.CreateResponse(500, []byte("Oops my bad\n"))
+		body = []byte("Oops my bad\n")
+		rw.WriteStatusLine(500)
+		rw.WriteHeaders(response.GetDefaultHeaders(len(body)))
 	default:
-		resp = response.CreateResponse(200, []byte("All good! \n"))
+		body = []byte("All good! \n")
+		rw.WriteStatusLine(200)
+		rw.WriteHeaders(response.GetDefaultHeaders(len(body)))
 	}
-	resp.Write(w)
+	rw.WriteBody(body)
 }
 
 func main() {

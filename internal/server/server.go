@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -30,7 +29,7 @@ func MakeHandlerError(code int, msg string) *HandlerError {
 }
 
 // Assume that you write a proper response object to w if you return nil no error
-type Handler func(w io.Writer, req *request.Request)
+type Handler func(w *response.Writer, req *request.Request)
 
 // bind+listen to a port -> in a loop accept connections and handle each in a goroutine -> do until closed
 type Server struct {
@@ -74,17 +73,28 @@ func (s *Server) listen(handler Handler) {
 	}
 }
 
-// Only actually write to connection here, we pass handler a bytes buffer
-// and let it write to the buffer, once it returns we will write the buffer to the connection
+// This function takes in connection, reads to parse the request
+// Upon parsing it will pass the request and new response.Writer to
+// the user-defined handler. If error occurs in parsing -> sends back 400 w/ explanation
+// If response.Writer goes to error state it will write back a 500 response
 func (s *Server) handle(conn io.ReadWriteCloser, handler Handler) {
 	defer conn.Close()
 	req, err := request.RequestFromReader(conn)
-	bufr := bytes.NewBuffer(nil) // makes a dynamic array buffer to write to
+	responseWriter := response.MakeResponseWriter(conn)
 	if err != nil {
-		log.Println("Parsing the request caused the following error, sending 400", err.Error())
-		response.WriteStatusLine(conn, []byte("HTTP/1.1"), 400)
+		body := fmt.Sprintf("Parsing the request caused the following error, sending 400: %s", err.Error())
+		log.Println(body)
+		responseWriter.WriteStatusLine(400)
+		responseWriter.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		responseWriter.WriteBody([]byte(body))
 		return
 	}
-	handler(bufr, req)
-	conn.Write(bufr.Bytes())
+	handler(responseWriter, req)
+	if responseWriter.State == response.ResponseError {
+		body := "User defined handler function incorrectly called response writer"
+		log.Println(body)
+		responseWriter.WriteStatusLine(500)
+		responseWriter.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		responseWriter.WriteBody([]byte(body))
+	}
 }
