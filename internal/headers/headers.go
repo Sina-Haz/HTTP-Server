@@ -16,13 +16,26 @@ func (h Headers) Get(name string) string {
 	return h[strings.ToLower(name)]
 }
 
-func (h Headers) Set(name, val string) {
+func (h Headers) Remove(name string) {
+	name = strings.ToLower(name)
+	delete(h, name)
+}
+
+// If name doesn't exist sets headers[name] -> val
+// Otherwise appends to with comma separator headers[name] -> existing, val
+func (h Headers) Put(name, val string) {
 	name = strings.ToLower(name)
 	if contains, ok := h[name]; ok {
 		h[name] = contains + ", " + val
 	} else {
 		h[name] = val
 	}
+}
+
+// Will make h[name] = val regardless of whether or not something is currently already there
+func (h Headers) Set(name, val string) {
+	name = strings.ToLower(name)
+	h[name] = val
 }
 
 // Determines if a string is a valid token (i.e. letter, digit or allowed special char)

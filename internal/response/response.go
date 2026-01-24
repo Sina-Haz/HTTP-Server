@@ -35,10 +35,10 @@ func IntToStatusCode(code int) StatusCode {
 type ResponseState string
 
 const (
-	responseInit    ResponseState = "status-line"
-	responseHeaders ResponseState = "headers"
-	responseBody    ResponseState = "body"
-	responseDone    ResponseState = "done"
+	ResponseInit    ResponseState = "status-line"
+	ResponseHeaders ResponseState = "headers"
+	ResponseBody    ResponseState = "body"
+	ResponseDone    ResponseState = "done"
 	ResponseError   ResponseState = "error"
 )
 
@@ -53,7 +53,7 @@ type Writer struct {
 func MakeResponseWriter(w io.Writer) *Writer {
 	return &Writer{
 		writer: w,
-		State:  responseInit,
+		State:  ResponseInit,
 	}
 }
 
@@ -68,9 +68,9 @@ func (w *Writer) stateCheck(expected ResponseState) error {
 	return nil
 }
 
-// code can be 200, 400, 500 with mesages or custom code w/ no message
+// code can be 200, 400, 500 with messages or custom code w/ no message
 func (w *Writer) WriteStatusLine(code int) error {
-	err := w.stateCheck(responseInit)
+	err := w.stateCheck(ResponseInit)
 	if err != nil {
 		return err
 	}
@@ -90,12 +90,12 @@ func (w *Writer) WriteStatusLine(code int) error {
 		return fmt.Errorf("didn't write full status line")
 	}
 
-	w.State = responseHeaders
+	w.State = ResponseHeaders
 	return nil
 }
 
 func (w *Writer) WriteHeaders(headers headers.Headers) error {
-	err := w.stateCheck(responseHeaders)
+	err := w.stateCheck(ResponseHeaders)
 	if err != nil {
 		return err
 	}
@@ -116,12 +116,12 @@ func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	if err != nil {
 		w.State = ResponseError
 	}
-	w.State = responseBody
+	w.State = ResponseBody
 	return nil
 }
 
 func (w *Writer) WriteBody(p []byte) (int, error) {
-	err := w.stateCheck(responseBody)
+	err := w.stateCheck(ResponseBody)
 	if err != nil {
 		return 0, err
 	}
@@ -130,8 +130,38 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	if err != nil {
 		w.State = ResponseError
 	}
-	w.State = responseDone
+	w.State = ResponseDone
 	return n, nil
+}
+
+// Function to write one chunk of a body which is streamed via chunked-encoding
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	err := w.stateCheck(ResponseBody)
+	if err != nil {
+		return 0, err
+	}
+	data := fmt.Sprintf("%X\r\n%s\r\n", len(p), p)
+	n, err := w.writer.Write([]byte(data))
+	if err != nil {
+		w.State = ResponseError
+	}
+	return n, err
+}
+
+// Will simply write 0\r\n and line with only CRLF
+// to signal that we are done sending chunks for body
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	err := w.stateCheck(ResponseBody)
+	if err != nil {
+		return 0, err
+	}
+	data := "0\r\n\r\n"
+	n, err := w.writer.Write([]byte(data))
+	if err != nil {
+		w.State = ResponseError
+	}
+	w.State = ResponseDone // TODO: may need to make this responseTrailers in the future, figure out how we are to handle trailers
+	return n, err
 }
 
 // Adds default headers such as content length, connection, Content-type
@@ -146,43 +176,3 @@ func GetDefaultHeaders(contentLen int) headers.Headers {
 	h.Set("Content-type", "text/plain")
 	return h
 }
-
-// ================================== OLD RESPONSE DESIGN
-// Not going to do it this way because it would
-// require entire response to be stored in memory
-// before writing it back to the user, the real way internet works
-// is that response is written bank usually in chunks
-// in HTTP/1.1 we write those chunks directly over to the TCP connection
-// But in 2.0/3.0 may be different (i.e. using multiplexing/caching idk)
-// type Response struct {
-// 	version []byte
-// 	code    int
-// 	status  StatusCode
-// 	headers headers.Headers
-// 	body    []byte
-// }
-//
-// func CreateResponse(code int, body []byte) *Response {
-// 	stat := IntToStatusCode(code)
-// 	hdr := GetDefaultHeaders(len(body))
-// 	return &Response{
-// 		version: []byte("HTTP/1.1"),
-// 		code:    code,
-// 		status:  stat,
-// 		headers: hdr,
-// 		body:    body,
-// 	}
-// }
-//
-// func (r Response) Write(w io.Writer) error {
-// 	err := WriteStatusLine(w, r.version, r.code)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	err = WriteHeaders(w, r.headers)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	_, err = w.Write(r.body)
-// 	return err
-// }

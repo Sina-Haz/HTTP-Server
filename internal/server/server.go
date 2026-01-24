@@ -83,18 +83,22 @@ func (s *Server) handle(conn io.ReadWriteCloser, handler Handler) {
 	responseWriter := response.MakeResponseWriter(conn)
 	if err != nil {
 		body := fmt.Sprintf("Parsing the request caused the following error, sending 400: %s", err.Error())
-		log.Println(body)
-		responseWriter.WriteStatusLine(400)
-		responseWriter.WriteHeaders(response.GetDefaultHeaders(len(body)))
-		responseWriter.WriteBody([]byte(body))
+		WriteDefaultResponse(responseWriter, 400, body)
 		return
 	}
 	handler(responseWriter, req)
 	if responseWriter.State == response.ResponseError {
 		body := "User defined handler function incorrectly called response writer"
-		log.Println(body)
-		responseWriter.WriteStatusLine(500)
-		responseWriter.WriteHeaders(response.GetDefaultHeaders(len(body)))
-		responseWriter.WriteBody([]byte(body))
+		WriteDefaultResponse(responseWriter, 500, body) // TODO: may not be correct b/c what if the user-defined handler already wrote some stuff to the connection? may send back unparseable data
 	}
+}
+
+// Convenience function for writing back a simple response without streaming data or using any special headers
+// Will use response writer to write back a response with specified status and body and default headers
+func WriteDefaultResponse(w *response.Writer, status int, body string) {
+	log.Println("response body:	", body)
+	w.State = response.ResponseInit
+	w.WriteStatusLine(status)
+	w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+	w.WriteBody([]byte(body))
 }

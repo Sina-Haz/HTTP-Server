@@ -172,8 +172,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		copy(buf, buf[parsed:bufLen])
 		bufLen -= parsed
 	}
+	// TODO: why was this code causing an error when we send a request with netcat?
 	if string(buf[:bufLen]) != "" {
-		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%s\n", string(buf[:bufLen]))
+		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%q\n", string(buf[:bufLen]))
 	}
 
 	return req, nil
