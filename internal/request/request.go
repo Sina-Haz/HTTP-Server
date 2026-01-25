@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
 
@@ -172,10 +173,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		copy(buf, buf[parsed:bufLen])
 		bufLen -= parsed
 	}
-	// TODO: why was this code causing an error when we send a request with netcat?
 	if string(buf[:bufLen]) != "" {
-		return req, fmt.Errorf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%q\n", string(buf[:bufLen]))
+		// Sometimes if we use utils like echo: echo -e "..." | nc <port>, echo will append a newline or something so don't fail but still report this
+		log.Println("WARNING: ", fmt.Sprintf("Request reached final state but parsed data != read data, here is remaining data in buffer: \n%q\n", string(buf[:bufLen])))
 	}
-
 	return req, nil
 }
